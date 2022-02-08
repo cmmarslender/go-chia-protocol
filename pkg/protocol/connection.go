@@ -95,6 +95,14 @@ func (c *Connection) ensureConnection() error {
 	return nil
 }
 
+// Close closes the connection, if open
+func (c *Connection) Close() {
+	if c.conn != nil {
+		c.conn.Close()
+		c.conn = nil
+	}
+}
+
 func (c *Connection) Handshake() error {
 	// Handshake
 	handshake := &protocols.Handshake{
