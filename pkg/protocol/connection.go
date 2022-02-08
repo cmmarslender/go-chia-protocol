@@ -93,29 +93,28 @@ func (c *Connection) ensureConnection() error {
 		if err != nil {
 			return err
 		}
-
-		// Run the listener in the background
-		go c.ListenSync()
-
-		// Handshake
-		handshake := &protocols.Handshake{
-			NetworkID:       "mainnet", // @TODO Get the proper network ID
-			ProtocolVersion: protocols.ProtocolVersion,
-			SoftwareVersion: "1.2.11",
-			ServerPort:      c.peerPort,
-			NodeType:        protocols.NodeTypeFullNode, // I guess we're a full node
-			Capabilities: []protocols.Capability{
-				{
-					Capability: protocols.CapabilityTypeBase,
-					Value:      "1",
-				},
-			},
-		}
-
-		return c.Do(protocols.ProtocolMessageTypeHandshake, handshake)
 	}
 
 	return nil
+}
+
+func (c *Connection) Handshake() error {
+	// Handshake
+	handshake := &protocols.Handshake{
+		NetworkID:       "mainnet", // @TODO Get the proper network ID
+		ProtocolVersion: protocols.ProtocolVersion,
+		SoftwareVersion: "1.2.11",
+		ServerPort:      c.peerPort,
+		NodeType:        protocols.NodeTypeFullNode, // I guess we're a full node
+		Capabilities: []protocols.Capability{
+			{
+				Capability: protocols.CapabilityTypeBase,
+				Value:      "1",
+			},
+		},
+	}
+
+	return c.Do(protocols.ProtocolMessageTypeHandshake, handshake)
 }
 
 // Do sends a request over the websocket
@@ -133,15 +132,25 @@ func (c *Connection) Do(messageType protocols.ProtocolMessageType, data interfac
 	return c.conn.WriteMessage(websocket.BinaryMessage, msgBytes)
 }
 
-// ListenSync Listens for async responses over the connection in a synchronous fashion, blocking anything else
-func (c *Connection) ListenSync() ([]byte, error) {
+// ReadSync Reads for async responses over the connection in a synchronous fashion, blocking anything else
+func (c *Connection) ReadSync() error {
 	for {
 		_, bytes, err := c.conn.ReadMessage()
 		if err != nil {
 			// @TODO Handle Error
-			return nil, err
+			return err
 
 		}
 		c.handler(protocols.DecodeMessage(bytes))
 	}
+}
+
+// ReadOne reads and returns one message from the connection
+func (c *Connection) ReadOne() (*protocols.Message, error) {
+	_, bytes, err := c.conn.ReadMessage()
+	if err != nil {
+		return nil, err
+	}
+
+	return protocols.DecodeMessage(bytes)
 }
