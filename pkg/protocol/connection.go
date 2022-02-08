@@ -22,14 +22,15 @@ type Connection struct {
 	peerKeyPair *tls.Certificate
 	peerDialer  *websocket.Dialer
 
-	conn *websocket.Conn
+	handshakeTimeout time.Duration
+	conn             *websocket.Conn
 }
 
 // PeerResponseHandlerFunc is a function that will be called when a response is returned from a peer
 type PeerResponseHandlerFunc func(*protocols.Message, error)
 
 // NewConnection creates a new connection object with the specified peer
-func NewConnection(ip *net.IP) (*Connection, error) {
+func NewConnection(ip *net.IP, options ...ConnectionOptionFunc) (*Connection, error) {
 	cfg, err := config.GetChiaConfig()
 	if err != nil {
 		return nil, err
@@ -39,6 +40,15 @@ func NewConnection(ip *net.IP) (*Connection, error) {
 		chiaConfig: cfg,
 		peerIP:     ip,
 		peerPort:   cfg.FullNode.Port,
+	}
+
+	for _, fn := range options {
+		if fn == nil {
+			continue
+		}
+		if err := fn(c); err != nil {
+			return nil, err
+		}
 	}
 
 	err = c.loadKeyPair()
@@ -70,7 +80,7 @@ func (c *Connection) generateDialer() error {
 	if c.peerDialer == nil {
 		c.peerDialer = &websocket.Dialer{
 			Proxy:            http.ProxyFromEnvironment,
-			HandshakeTimeout: 45 * time.Second,
+			HandshakeTimeout: c.handshakeTimeout,
 			TLSClientConfig: &tls.Config{
 				Certificates:       []tls.Certificate{*c.peerKeyPair},
 				InsecureSkipVerify: true,
@@ -103,6 +113,7 @@ func (c *Connection) Close() {
 	}
 }
 
+// Handshake performs the RPC handshake. This should be called before any other method
 func (c *Connection) Handshake() error {
 	// Handshake
 	handshake := &protocols.Handshake{
