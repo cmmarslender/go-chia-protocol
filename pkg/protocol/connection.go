@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/cmmarslender/go-chia-lib/pkg/config"
-	"github.com/cmmarslender/go-chia-lib/pkg/streamable"
+	"github.com/cmmarslender/go-chia-lib/pkg/protocols"
 	"github.com/gorilla/websocket"
 )
 
@@ -28,7 +28,7 @@ type Connection struct {
 }
 
 // PeerResponseHandlerFunc is a function that will be called when a response is returned from a peer
-type PeerResponseHandlerFunc func()
+type PeerResponseHandlerFunc func(*protocols.Message, error)
 
 // NewConnection creates a new connection object with the specified peer
 func NewConnection(ip *net.IP, handler PeerResponseHandlerFunc) (*Connection, error) {
@@ -94,48 +94,52 @@ func (c *Connection) ensureConnection() error {
 			return err
 		}
 
+		// Run the listener in the background
+		go c.ListenSync()
+
 		// Handshake
-		handshake := &streamable.Handshake{
+		handshake := &protocols.Handshake{
 			NetworkID:       "mainnet", // @TODO Get the proper network ID
-			ProtocolVersion: streamable.ProtocolVersion,
+			ProtocolVersion: protocols.ProtocolVersion,
 			SoftwareVersion: "1.2.11",
 			ServerPort:      c.peerPort,
-			NodeType:        streamable.NodeTypeFullNode, // I guess we're a full node
-			Capabilities: []streamable.Capability{
+			NodeType:        protocols.NodeTypeFullNode, // I guess we're a full node
+			Capabilities: []protocols.Capability{
 				{
-					Capability: streamable.CapabilityTypeBase,
+					Capability: protocols.CapabilityTypeBase,
 					Value:      "1",
 				},
 			},
 		}
 
-		return c.Do(handshake)
+		return c.Do(protocols.ProtocolMessageTypeHandshake, handshake)
 	}
 
 	return nil
 }
 
 // Do sends a request over the websocket
-func (c *Connection) Do(data interface{}) error {
+func (c *Connection) Do(messageType protocols.ProtocolMessageType, data interface{}) error {
 	err := c.ensureConnection()
 	if err != nil {
 		return err
 	}
 
-	encodedData, err := streamable.Marshal(data)
-	if err != nil {
-		return err
-	}
-
-	msg := &streamable.Message{
-		ProtocolMessageType: streamable.ProtocolMessageTypeHandshake,
-		Data:                encodedData,
-	}
-
-	msgBytes, err := streamable.Marshal(msg)
+	msgBytes, err := protocols.MakeMessageBytes(messageType, data)
 	if err != nil {
 		return err
 	}
 
 	return c.conn.WriteMessage(websocket.BinaryMessage, msgBytes)
+}
+
+// ListenSync Listens for async responses over the connection in a synchronous fashion, blocking anything else
+func (c *Connection) ListenSync() ([]byte, error) {
+	for {
+		_, bytes, err := c.conn.ReadMessage()
+		if err != nil {
+			// @TODO Handle Error
+		}
+		c.handler(protocols.DecodeMessage(bytes))
+	}
 }
