@@ -22,8 +22,6 @@ type Connection struct {
 	peerKeyPair *tls.Certificate
 	peerDialer  *websocket.Dialer
 
-	handler PeerResponseHandlerFunc
-
 	conn *websocket.Conn
 }
 
@@ -31,7 +29,7 @@ type Connection struct {
 type PeerResponseHandlerFunc func(*protocols.Message, error)
 
 // NewConnection creates a new connection object with the specified peer
-func NewConnection(ip *net.IP, handler PeerResponseHandlerFunc) (*Connection, error) {
+func NewConnection(ip *net.IP) (*Connection, error) {
 	cfg, err := config.GetChiaConfig()
 	if err != nil {
 		return nil, err
@@ -41,7 +39,6 @@ func NewConnection(ip *net.IP, handler PeerResponseHandlerFunc) (*Connection, er
 		chiaConfig: cfg,
 		peerIP:     ip,
 		peerPort:   cfg.FullNode.Port,
-		handler:    handler,
 	}
 
 	err = c.loadKeyPair()
@@ -133,7 +130,7 @@ func (c *Connection) Do(messageType protocols.ProtocolMessageType, data interfac
 }
 
 // ReadSync Reads for async responses over the connection in a synchronous fashion, blocking anything else
-func (c *Connection) ReadSync() error {
+func (c *Connection) ReadSync(handler PeerResponseHandlerFunc) error {
 	for {
 		_, bytes, err := c.conn.ReadMessage()
 		if err != nil {
@@ -141,7 +138,7 @@ func (c *Connection) ReadSync() error {
 			return err
 
 		}
-		c.handler(protocols.DecodeMessage(bytes))
+		handler(protocols.DecodeMessage(bytes))
 	}
 }
 
