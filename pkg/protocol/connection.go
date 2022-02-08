@@ -139,6 +139,8 @@ func (c *Connection) ListenSync() ([]byte, error) {
 		_, bytes, err := c.conn.ReadMessage()
 		if err != nil {
 			// @TODO Handle Error
+			return nil, err
+
 		}
 		c.handler(protocols.DecodeMessage(bytes))
 	}
