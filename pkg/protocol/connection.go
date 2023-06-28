@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/cmmarslender/go-chia-lib/pkg/config"
+	"github.com/chia-network/go-chia-libs/pkg/config"
 	"github.com/cmmarslender/go-chia-lib/pkg/protocols"
 	"github.com/gorilla/websocket"
 )
@@ -68,7 +68,7 @@ func NewConnection(ip *net.IP, options ...ConnectionOptionFunc) (*Connection, er
 func (c *Connection) loadKeyPair() error {
 	var err error
 
-	c.peerKeyPair, err = c.chiaConfig.FullNode.SSL.LoadPublicKeyPair()
+	c.peerKeyPair, err = c.chiaConfig.FullNode.SSL.LoadPublicKeyPair(c.chiaConfig.ChiaRoot)
 	if err != nil {
 		return err
 	}
@@ -108,7 +108,10 @@ func (c *Connection) ensureConnection() error {
 // Close closes the connection, if open
 func (c *Connection) Close() {
 	if c.conn != nil {
-		c.conn.Close()
+		err := c.conn.Close()
+		if err != nil {
+			return
+		}
 		c.conn = nil
 	}
 }
@@ -117,9 +120,9 @@ func (c *Connection) Close() {
 func (c *Connection) Handshake() error {
 	// Handshake
 	handshake := &protocols.Handshake{
-		NetworkID:       "mainnet", // @TODO Get the proper network ID
+		NetworkID:       c.chiaConfig.SelectedNetwork,
 		ProtocolVersion: protocols.ProtocolVersion,
-		SoftwareVersion: "1.2.11",
+		SoftwareVersion: "2.0.0",
 		ServerPort:      c.peerPort,
 		NodeType:        protocols.NodeTypeFullNode, // I guess we're a full node
 		Capabilities: []protocols.Capability{
@@ -133,7 +136,7 @@ func (c *Connection) Handshake() error {
 	return c.Do(protocols.ProtocolMessageTypeHandshake, handshake)
 }
 
-// Do sends a request over the websocket
+// Do send a request over the websocket
 func (c *Connection) Do(messageType protocols.ProtocolMessageType, data interface{}) error {
 	err := c.ensureConnection()
 	if err != nil {
