@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -165,11 +166,27 @@ func (c *Connection) ReadSync(handler PeerResponseHandlerFunc) error {
 }
 
 // ReadOne reads and returns one message from the connection
-func (c *Connection) ReadOne() (*protocols.Message, error) {
+func (c *Connection) ReadOne(timeout time.Duration) (*protocols.Message, error) {
+	chBytes := make(chan []byte, 1)
+	chErr := make(chan error, 1)
+	ctxTimeout, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	go c.readOneCtx(ctxTimeout, chBytes, chErr)
+
+	select {
+	case <-ctxTimeout.Done():
+		return nil, fmt.Errorf("context cancelled: %v", ctxTimeout.Err())
+	case result := <-chBytes:
+		return protocols.DecodeMessage(result)
+	}
+}
+
+func (c *Connection) readOneCtx(ctx context.Context, chBytes chan []byte, chErr chan error) {
 	_, bytes, err := c.conn.ReadMessage()
 	if err != nil {
-		return nil, err
+		chErr <- err
 	}
 
-	return protocols.DecodeMessage(bytes)
+	chBytes <- bytes
 }
